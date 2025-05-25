@@ -30,6 +30,6 @@ if __name__ == '__main__':
     print(a)
 
     # print(number, another_number, sep=" % ") # sep - это разделитель
-# print(dictionary["cat"]) тут название словаря[номер] - если список; название словаря["ключ"] - если словарь)
+# print(dictionary["cat"]) тут название словаря[номер] - если список; название словаря["ключ"] - если словарь
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
