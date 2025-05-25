@@ -14,6 +14,8 @@ def print_hi(name):
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     # print_hi('Misha')
+
+    # Типы данных(integer, float, boolean, string, list, dictionary)
     number = 100 # integer - целые числа
     another_number = "100" # string
     float_number = 10.5 # float - числа с плавающей запятой (но используется только точка)
@@ -32,4 +34,4 @@ if __name__ == '__main__':
     # print(number, another_number, sep=" % ") # sep - это разделитель
 # print(dictionary["cat"]) тут название словаря[номер] - если список; название словаря["ключ"] - если словарь
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+    # Кортеж(tuple) в Python — это список, который нельзя изменить.
