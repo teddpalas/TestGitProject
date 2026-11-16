@@ -69,7 +69,8 @@ class GeoTests(unittest.IsolatedAsyncioTestCase):
             await router.enrich(listing)
             await router.enrich(listing)
             api.assert_awaited_once()
-            self.assertIn("foot-walking", api.call_args.args[0])
+            self.assertEqual(api.call_args.args[0], "https://api.heigit.org/openrouteservice/v2/directions/foot-walking/json")
+            self.assertEqual(api.call_args.kwargs["headers"], {"Authorization": "test-only"})
             self.assertEqual(api.call_args.args[1]["coordinates"], [[69.21, 41.31], [69.2, 41.3]])
             self.assertEqual(listing.walking_minutes, 20)
 

@@ -98,7 +98,7 @@ class WalkingRouter:
                 return
         try:
             result = await post_json(
-                "https://api.openrouteservice.org/v2/directions/foot-walking/json",
+                "https://api.heigit.org/openrouteservice/v2/directions/foot-walking/json",
                 {"coordinates": coordinates, "instructions": False, "geometry": False,
                  "radiuses": [100, 100]},
                 headers={"Authorization": settings.ors_api_key}, service="openrouteservice")
