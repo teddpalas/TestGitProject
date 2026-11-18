@@ -3,6 +3,22 @@
 from .http import APIError, post_json
 
 
+BUTTON_COMMANDS = {
+    "📊 Состояние": "/status",
+    "📋 Правила": "/rules",
+    "⏸ Пауза": "/pause",
+    "▶️ Возобновить": "/resume",
+}
+
+CONTROL_KEYBOARD = {
+    "keyboard": [["📊 Состояние", "📋 Правила"], ["⏸ Пауза", "▶️ Возобновить"]],
+    "resize_keyboard": True,
+    "is_persistent": True,
+    "one_time_keyboard": False,
+    "input_field_placeholder": "Выберите действие или введите команду",
+}
+
+
 class BotAPI:
     def __init__(self, token: str, chat_id: int):
         self._base = f"https://api.telegram.org/bot{token}/"
@@ -18,7 +34,8 @@ class BotAPI:
     async def message(self, text: str, *, silent: bool = True):
         return await self.call("sendMessage", chat_id=self.chat_id, text=text[:4000],
                                disable_notification=silent,
-                               link_preview_options={"is_disabled": True})
+                               link_preview_options={"is_disabled": True},
+                               reply_markup=CONTROL_KEYBOARD)
 
     async def forward(self, channel: str, message_ids: list[int]) -> bool:
         try:
@@ -53,10 +70,13 @@ async def handle_update(update: dict, bot: BotAPI, store) -> None:
             or message.get("chat", {}).get("id") != bot.chat_id
             or message.get("from", {}).get("id") != bot.chat_id):
         return
-    text = message.get("text", "")
-    command = text.split(maxsplit=1)[0].split("@")[0].lower() if text else ""
-    if command in ("/start", "/help"):
-        answer = ("Бот подключён к вашему личному чату.\n/status — состояние\n"
+    text = message.get("text", "").strip()
+    command = BUTTON_COMMANDS.get(text)
+    if command is None:
+        command = text.split(maxsplit=1)[0].split("@")[0].lower() if text else ""
+    if command in ("/start", "/help", "/menu"):
+        answer = ("Управляйте ботом кнопками под строкой ввода.\n"
+                  "/menu — показать кнопки\n/status — состояние\n"
                   "/rules — правила\n/pause — приостановить отправку\n/resume — возобновить\n"
                   "Пауза сохраняет очередь. Чтение канала продолжится.")
     elif command == "/rules":
