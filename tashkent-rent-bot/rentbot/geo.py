@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 import re
 
-from .http import APIError, post_json
+from .http import APIError, get_json, post_json
 from .models import Listing
 
 
@@ -74,40 +74,105 @@ def apply_catalogue(listing: Listing, path: Path) -> None:
             listing.evidence["commissioned_on"] = f"Подтверждённый справочник: {entry['source']}"
 
 
+def _minutes(duration) -> float:
+    if isinstance(duration, bool):
+        raise ValueError("Invalid route duration")
+    minutes = float(duration) / 60
+    if not math.isfinite(minutes) or minutes < 0:
+        raise ValueError("Invalid route duration")
+    return minutes
+
+
+def _distance_metres(first, second) -> float:
+    """Distance is used only to validate snapped endpoints, never as a route."""
+    lon1, lat1 = first[:2]
+    lon2, lat2 = second[:2]
+    values = (lon1, lat1, lon2, lat2)
+    if any(isinstance(value, bool) or not isinstance(value, (int, float))
+           or not math.isfinite(value) for value in values):
+        raise ValueError("Invalid route coordinates")
+    if not (-180 <= lon1 <= 180 and -180 <= lon2 <= 180
+            and -90 <= lat1 <= 90 and -90 <= lat2 <= 90):
+        raise ValueError("Invalid route coordinates")
+    lat1, lat2 = math.radians(lat1), math.radians(lat2)
+    dlon = math.radians(lon2 - lon1)
+    haversine = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return 6371000 * 2 * math.asin(math.sqrt(min(1, max(0, haversine))))
+
+
+def _geoapify_minutes(result: dict, coordinates: list) -> float:
+    feature = result["features"][0]
+    properties = feature["properties"]
+    if properties.get("mode", "walk") != "walk":
+        raise ValueError("Unexpected route mode")
+    geometry = feature["geometry"]
+    if geometry["type"] == "MultiLineString":
+        lines = geometry["coordinates"]
+    elif geometry["type"] == "LineString":
+        lines = [geometry["coordinates"]]
+    else:
+        raise ValueError("Unexpected route geometry")
+    if not isinstance(lines, list) or not lines or any(not isinstance(line, list) or len(line) < 2 for line in lines):
+        raise ValueError("Missing route geometry")
+    for actual, requested in ((lines[0][0], coordinates[0]), (lines[-1][-1], coordinates[1])):
+        if not isinstance(actual, list) or len(actual) < 2 or _distance_metres(actual, requested) > 100:
+            raise ValueError("Route endpoint too far from requested pin")
+    return _minutes(properties["time"])
+
+
 class WalkingRouter:
     def __init__(self, settings, store):
         self.settings, self.store = settings, store
 
     async def enrich(self, listing: Listing) -> None:
+        listing.walking_minutes = None
+        listing.evidence.pop("walking_minutes", None)
+        listing.evidence.pop("walking_provider", None)
         apply_catalogue(listing, self.settings.locations_file)
         settings = self.settings
         if listing.latitude is None or listing.longitude is None:
             return
-        if not settings.office_location_confirmed or not settings.ors_api_key:
+        provider = settings.routing_provider
+        if not settings.office_location_confirmed or not settings.routing_key or provider not in ("ors", "geoapify"):
             listing.warnings.append("Пешеходный маршрут не настроен")
             return
         coordinates = [[listing.longitude, listing.latitude], [settings.office_lon, settings.office_lat]]
-        key = "route:" + hashlib.sha256(json.dumps(coordinates).encode()).hexdigest()
+        key = "route:" + provider + ":" + hashlib.sha256(json.dumps(coordinates).encode()).hexdigest()
+        attribution = "Geoapify" if provider == "geoapify" else "openrouteservice"
         cached = self.store.get_meta(key)
         now = datetime.now(timezone.utc)
         if cached:
-            record = json.loads(cached)
-            if datetime.fromisoformat(record["expires"]) > now:
-                listing.walking_minutes = record["minutes"]
-                listing.evidence["walking_minutes"] = "Пешеходный маршрут openrouteservice / OpenStreetMap"
-                return
+            try:
+                record = json.loads(cached)
+                if isinstance(record["minutes"], bool) or not isinstance(record["minutes"], (int, float)):
+                    raise ValueError("Invalid cached route duration")
+                minutes = _minutes(record["minutes"] * 60)
+                if datetime.fromisoformat(record["expires"]) > now:
+                    listing.walking_minutes = minutes
+                    listing.evidence["walking_minutes"] = f"Пешеходный маршрут {attribution} / OpenStreetMap"
+                    listing.evidence["walking_provider"] = provider
+                    return
+            except (KeyError, ValueError, TypeError, OverflowError):
+                pass  # A damaged cache entry must not establish a walking time.
         try:
-            result = await post_json(
-                "https://api.heigit.org/openrouteservice/v2/directions/foot-walking/json",
-                {"coordinates": coordinates, "instructions": False, "geometry": False,
-                 "radiuses": [100, 100]},
-                headers={"Authorization": settings.ors_api_key}, service="openrouteservice")
-            minutes = float(result["routes"][0]["summary"]["duration"]) / 60
-            if not math.isfinite(minutes) or minutes < 0:
-                raise ValueError("Invalid route duration")
-        except (APIError, KeyError, IndexError, ValueError, TypeError):
+            if provider == "geoapify":
+                result = await get_json(
+                    "https://api.geoapify.com/v1/routing",
+                    {"waypoints": f"{listing.latitude},{listing.longitude}|{settings.office_lat},{settings.office_lon}",
+                     "mode": "walk", "format": "geojson", "apiKey": settings.routing_key},
+                    service="Geoapify")
+                minutes = _geoapify_minutes(result, coordinates)
+            else:
+                result = await post_json(
+                    "https://api.heigit.org/openrouteservice/v2/directions/foot-walking/json",
+                    {"coordinates": coordinates, "instructions": False, "geometry": False,
+                     "radiuses": [100, 100]},
+                    headers={"Authorization": settings.routing_key}, service="openrouteservice")
+                minutes = _minutes(result["routes"][0]["summary"]["duration"])
+        except (APIError, KeyError, IndexError, ValueError, TypeError, AttributeError, OverflowError):
             listing.warnings.append("Не удалось проверить пешеходный маршрут")
             return
         listing.walking_minutes = minutes
-        listing.evidence["walking_minutes"] = "Пешеходный маршрут openrouteservice / OpenStreetMap"
+        listing.evidence["walking_minutes"] = f"Пешеходный маршрут {attribution} / OpenStreetMap"
+        listing.evidence["walking_provider"] = provider
         self.store.set_meta(key, json.dumps({"minutes": minutes, "expires": (now + timedelta(days=7)).isoformat()}))

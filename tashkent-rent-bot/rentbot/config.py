@@ -42,6 +42,8 @@ class Settings:
     office_location_confirmed: bool = False
     ors_api_key: str = field(default="", repr=False)
     locations_file: Path = Path("locations.json")
+    routing_provider: str = "ors"
+    geoapify_api_key: str = field(default="", repr=False)
 
     @classmethod
     def from_env(cls):
@@ -72,11 +74,17 @@ class Settings:
             office_location_confirmed=os.environ.get("OFFICE_LOCATION_CONFIRMED", "false").lower() == "true",
             ors_api_key=os.environ.get("ORS_API_KEY", "").strip(),
             locations_file=Path(os.environ.get("LOCATIONS_FILE", "locations.json")),
+            routing_provider=os.environ.get("ROUTING_PROVIDER", "ors").strip().lower(),
+            geoapify_api_key=os.environ.get("GEOAPIFY_API_KEY", "").strip(),
         )
 
     @property
     def session_path(self) -> str:
         return str(self.data_dir / "reader")
+
+    @property
+    def routing_key(self) -> str:
+        return self.geoapify_api_key if self.routing_provider == "geoapify" else self.ors_api_key
 
     def validate(self, *, reader_only=False) -> list[str]:
         errors = []
@@ -102,4 +110,6 @@ class Settings:
                 errors.append(f"Некорректная координата {name}")
         if self.office_location_confirmed and self.office_lat is None:
             errors.append("Сначала укажите координаты офиса, затем подтвердите их")
+        if self.routing_provider not in {"geoapify", "ors"}:
+            errors.append("ROUTING_PROVIDER: выберите geoapify или ors")
         return errors

@@ -83,8 +83,10 @@ def main(argv=None) -> int:
             apply_catalogue(parse_listing("Проверка файла настроек"), settings.locations_file)
             print("Основные настройки заполнены. Секреты не выводятся.")
             print("Telegram и сервис маршрутов этой командой не проверяются.")
-            if not settings.ors_api_key or not settings.office_location_confirmed:
-                print("Маршруты не готовы: нужны ORS_API_KEY и подтверждённая точка офиса.")
+            print(f"Сервис пеших маршрутов: {settings.routing_provider}")
+            if not settings.routing_key or not settings.office_location_confirmed:
+                key_name = "GEOAPIFY_API_KEY" if settings.routing_provider == "geoapify" else "ORS_API_KEY"
+                print(f"Маршруты не готовы: нужны {key_name} и подтверждённая точка офиса.")
             return 0
         logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(message)s")
         logging.getLogger("rentbot").setLevel(logging.INFO)

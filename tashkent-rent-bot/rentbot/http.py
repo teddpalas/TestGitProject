@@ -3,6 +3,7 @@
 import asyncio
 import json
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
@@ -25,6 +26,8 @@ def _post(url: str, body: dict, headers: dict, timeout: int, service: str) -> di
             retry = int(json.loads(exc.read(16_384)).get("parameters", {}).get("retry_after", 0))
         except (ValueError, TypeError, AttributeError):
             pass
+        finally:
+            exc.close()
         raise APIError(service, exc.code, retry) from None
     except (URLError, OSError, ValueError):
         raise APIError(service) from None
@@ -32,3 +35,27 @@ def _post(url: str, body: dict, headers: dict, timeout: int, service: str) -> di
 
 async def post_json(url: str, body: dict, *, headers=None, timeout=30, service="API") -> dict:
     return await asyncio.to_thread(_post, url, body, headers or {}, timeout, service)
+
+
+def _get(url: str, params: dict, headers: dict, timeout: int, service: str) -> dict:
+    # The query contains the Geoapify credential. Never include URLs in errors.
+    request = Request(url + "?" + urlencode(params), method="GET",
+                      headers={"User-Agent": "tashkent-rent-bot/0.1", **headers})
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read(4_000_000))
+    except HTTPError as exc:
+        retry = 0
+        try:
+            retry = max(0, int(exc.headers.get("Retry-After", 0)))
+        except (ValueError, TypeError, AttributeError):
+            pass
+        finally:
+            exc.close()
+        raise APIError(service, exc.code, retry) from None
+    except (URLError, OSError, ValueError):
+        raise APIError(service) from None
+
+
+async def get_json(url: str, params: dict, *, headers=None, timeout=30, service="API") -> dict:
+    return await asyncio.to_thread(_get, url, params, headers or {}, timeout, service)

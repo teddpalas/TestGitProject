@@ -75,7 +75,10 @@ def explain(listing, decision, link: str) -> str:
         lines.append("Примечание: " + "; ".join(listing.warnings))
     lines.extend(["Коммунальные, залог и комиссия — отдельно; условия и фото в оригинале.", link])
     if listing.walking_minutes is not None:
-        lines.append("Маршрут: openrouteservice / © OpenStreetMap contributors.")
+        if listing.evidence.get("walking_provider") == "geoapify":
+            lines.append("Маршрут: Geoapify — https://www.geoapify.com/ · © OpenStreetMap contributors — https://www.openstreetmap.org/copyright")
+        else:
+            lines.append("Маршрут: openrouteservice / © OpenStreetMap contributors.")
     return "\n".join(lines)[:3800]
 
 

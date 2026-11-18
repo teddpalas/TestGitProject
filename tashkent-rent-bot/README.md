@@ -66,7 +66,11 @@ python -m venv .venv
 
 Укажите `OFFICE_LAT` и `OFFICE_LON` в локальном `.env`, самостоятельно проверьте точку входа в офис на карте, затем установите `OFFICE_LOCATION_CONFIRMED=true`. Личная рабочая точка не включена в исходники.
 
-Для расчёта маршрутов нужен ключ openrouteservice из [личного кабинета HeiGIT](https://account.heigit.org/) в `ORS_API_KEY`. Если аккаунта ещё нет, зарегистрируйтесь на [account.heigit.org/signup](https://account.heigit.org/signup) и скопируйте полный ключ кнопкой Copy. Используется пешеходный профиль `foot-walking` по адресу `https://api.heigit.org/openrouteservice/v2/directions/foot-walking/json`; оценка по прямой линии не подменяет время маршрута. Сервис получает координаты начала и конца маршрута. Без подтверждённых координат или при недоступности маршрутизатора время считается неизвестным, а не нулевым.
+В новом `.env.example` выбран **Geoapify**: `ROUTING_PROVIDER=geoapify`. Зарегистрируйтесь в [Geoapify My Projects](https://myprojects.geoapify.com/), создайте проект и скопируйте его ключ из раздела **API Keys** в локальную строку `GEOAPIFY_API_KEY=`. Используется только пешеходный режим `walk`. Карточки содержат атрибуцию Geoapify и OpenStreetMap. Ключ передаётся сервису по HTTPS; полный URL запроса с ключом не записывается в журнал.
+
+Альтернативный провайдер — openrouteservice: установите `ROUTING_PROVIDER=ors` и заполните `ORS_API_KEY` ключом из [личного кабинета HeiGIT](https://account.heigit.org/). Используется пешеходный профиль `foot-walking` по адресу `https://api.heigit.org/openrouteservice/v2/directions/foot-walking/json`. Для совместимости старый `.env` без `ROUTING_PROVIDER` продолжает выбирать ORS. Автоматического переключения между сервисами нет; ключи не взаимозаменяемы.
+
+Выбранный сервис получает координаты начала и конца маршрута. Оценка по прямой линии не подменяет время пути. Без подтверждённых координат, при отсутствии маршрута или недоступности сервиса время считается неизвестным, а не нулевым. Кэш разделён по провайдерам. Для Geoapify проверяется геометрия маршрута: если начало или конец оказались дальше 100 м от заданных точек, такой маршрут не считается подтверждённым.
 
 Точная точка квартиры может быть указана в объявлении либо задана в локальном справочнике:
 
@@ -108,6 +112,8 @@ python -m rentbot run
 | `EDIT_SCAN_LIMIT` | `100` | Число последних сообщений для проверки изменений |
 | `BACKFILL_LIMIT` | `0` | Сколько старых сообщений обработать при самом первом запуске |
 | `LOCATIONS_FILE` | `locations.json` | Локальный справочник проверенных адресов |
+| `ROUTING_PROVIDER` | `geoapify` в примере; `ors`, если переменной нет | Выбранный сервис пеших маршрутов |
+| `GEOAPIFY_API_KEY` | Пусто | Личный ключ Geoapify, только в локальном `.env` |
 
 При первом запуске старые объявления не рассылаются, если `BACKFILL_LIMIT=0`. После перезапуска приложение продолжает с сохранённой позиции. Очередь и журнал отправок хранятся в SQLite. Проверяются правки последних сообщений и актуальность объявления перед отправкой; бесконечная история правок не сканируется.
 
@@ -129,3 +135,4 @@ python -m unittest discover -s tests -v
 - [Telegram: сообщения, доступные боту](https://core.telegram.org/bots/faq#what-messages-will-my-bot-get)
 - [Telegram Bot API: пересылка и тихие уведомления](https://core.telegram.org/bots/api#forwardmessages)
 - [openrouteservice: Directions API](https://giscience.github.io/openrouteservice/api-reference/endpoints/directions/)
+- [Geoapify: Routing API](https://apidocs.geoapify.com/docs/routing/)
