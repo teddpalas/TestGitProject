@@ -22,24 +22,24 @@ class RulesTests(unittest.TestCase):
         self.assertEqual(classify(suitable(), TODAY).tier, "loud")
 
     def test_hard_exclusions(self):
-        for data in ({"rooms": 1}, {"area_m2": 39.99}, {"price_usd": 800.01},
+        for data in ({"rooms": 1}, {"area_m2": 39.99}, {"price_usd": 850.01},
                      {"walking_minutes": 25.001}, {"is_rental": False},
                      {"is_long_term": False}, {"is_new_building": False}):
             with self.subTest(data=data):
                 self.assertEqual(classify(suitable(**data), TODAY).tier, "reject")
 
     def test_each_single_deviation_is_quiet(self):
-        for data in ({"price_usd": 750.01}, {"price_usd": 800},
+        for data in ({"price_usd": 750.01}, {"price_usd": 850},
                      {"walking_minutes": 20.001}, {"walking_minutes": 25}):
             with self.subTest(data=data):
                 self.assertEqual(classify(suitable(**data), TODAY).tier, "quiet")
 
     def test_both_deviations_within_quiet_limits(self):
-        result = classify(suitable(price_usd=800, walking_minutes=25), TODAY)
+        result = classify(suitable(price_usd=850, walking_minutes=25), TODAY)
         self.assertEqual(result.tier, "quiet")
         self.assertEqual(len(result.deviations), 2)
-        self.assertEqual(classify(suitable(price_usd=800.01, walking_minutes=25), TODAY).tier, "reject")
-        self.assertEqual(classify(suitable(price_usd=800, walking_minutes=25.001), TODAY).tier, "reject")
+        self.assertEqual(classify(suitable(price_usd=850.01, walking_minutes=25), TODAY).tier, "reject")
+        self.assertEqual(classify(suitable(price_usd=850, walking_minutes=25.001), TODAY).tier, "reject")
 
     def test_previous_occupancy_does_not_affect_delivery(self):
         for occupancy in (False, True, None):
