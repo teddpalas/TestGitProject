@@ -48,11 +48,14 @@ class ControlTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_status_rules_buttons_and_menu_commands_answer_owner(self):
         self.store.set_meta("paused", "true")
+        self.store.set_meta("last_poll", "2026-11-23T16:13:36+00:00")
         for text in ("📊 Состояние", "/status"):
             await handle_update(self.update(text), self.bot, self.store)
             answer = self.bot.call.call_args.kwargs["text"]
             self.assertIn("В очереди: 2", answer)
             self.assertIn("пауза", answer)
+            self.assertIn("Последнее чтение канала (Ташкент): 2026-11-23T21:13:36+05:00",
+                          answer)
         for text in ("📋 Правила", "/rules"):
             await handle_update(self.update(text), self.bot, self.store)
             self.assertEqual(self.bot.call.call_args.kwargs["text"], RULES_TEXT)
@@ -63,6 +66,23 @@ class ControlTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("/pause", answer)
         self.assertEqual(self.bot.call.await_count, 7)
         self.assertEqual(self.store.get_meta("paused"), "true")
+        self.assertEqual(self.store.get_meta("last_poll"), "2026-11-23T16:13:36+00:00")
+
+    async def test_status_handles_date_rollover_and_unavailable_poll_time(self):
+        cases = (
+            (None, "ещё не было"),
+            ("not-a-timestamp", "время неизвестно"),
+            ("2026-11-23T16:13:36", "время неизвестно"),
+            ("2026-11-23T23:13:36Z", "2026-11-24T04:13:36+05:00"),
+        )
+        for stored, expected in cases:
+            with self.subTest(stored=stored):
+                if stored is not None:
+                    self.store.set_meta("last_poll", stored)
+                await handle_update(self.update("/status"), self.bot, self.store)
+                answer = self.bot.call.call_args.kwargs["text"]
+                self.assertIn(f"Последнее чтение канала (Ташкент): {expected}",
+                              answer.splitlines())
 
     async def test_button_label_must_match_the_whole_message(self):
         for text in ("⏸ Пауза позже", "▶️ Возобновить завтра"):

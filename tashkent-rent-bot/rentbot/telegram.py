@@ -1,5 +1,7 @@
 """Bot API delivery. The reader account never sends messages on your behalf."""
 
+from datetime import datetime
+
 from .http import APIError, post_json
 from .rules import (
     LOUD_MAX_PRICE_USD,
@@ -8,6 +10,7 @@ from .rules import (
     QUIET_MAX_PRICE_USD,
     QUIET_MAX_WALK_MINUTES,
 )
+from .schedule import TASHKENT
 
 
 BUTTON_COMMANDS = {
@@ -72,6 +75,18 @@ RULES_TEXT = (
 )
 
 
+def _last_poll_in_tashkent(value: str | None) -> str:
+    if value is None:
+        return "ещё не было"
+    try:
+        timestamp = datetime.fromisoformat(value)
+        if timestamp.tzinfo is not None:
+            return timestamp.astimezone(TASHKENT).isoformat(timespec="seconds")
+    except (ValueError, OverflowError):
+        pass
+    return "время неизвестно"
+
+
 async def handle_update(update: dict, bot: BotAPI, store) -> None:
     message = update.get("message", {})
     if (message.get("chat", {}).get("type") != "private"
@@ -100,7 +115,7 @@ async def handle_update(update: dict, bot: BotAPI, store) -> None:
         answer = (f"Отправка: {'пауза' if store.get_meta('paused') == 'true' else 'включена'}\n"
                   f"В очереди: {counts['pending']}\nОтправлено: {counts['sent']}\n"
                   f"Отсеяно: {counts['rejected']}\n"
-                  f"Последнее чтение канала (UTC): {store.get_meta('last_poll', 'ещё не было')}\n"
+                  f"Последнее чтение канала (Ташкент): {_last_poll_in_tashkent(store.get_meta('last_poll'))}\n"
                   f"Последний сбой: {store.get_meta('last_error', 'нет')}\n"
                   "Состояние маршрутов и недостающие параметры указаны в карточках.")
     else:
