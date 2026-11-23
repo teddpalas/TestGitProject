@@ -16,6 +16,12 @@ from .telegram import BotAPI, handle_update
 log = logging.getLogger("rentbot")
 
 
+def album_context_ids(post: SourcePost) -> range:
+    # Telegram albums contain at most ten items. Include adjacent IDs for
+    # captions or album parts that fall outside a history page.
+    return range(max(1, min(post.message_ids) - 10), max(post.message_ids) + 11)
+
+
 @contextmanager
 def single_instance(path: Path):
     """OS-released advisory lock; a crash does not leave a stale PID lock."""
@@ -71,10 +77,7 @@ class Service:
     async def complete_album(self, post: SourcePost) -> SourcePost:
         if post.group_id is None:
             return post
-        # Telegram albums contain at most ten items. Inspect adjacent IDs so
-        # a caption/album split at a page boundary is not silently lost.
-        ids = list(range(max(1, min(post.message_ids) - 10), max(post.message_ids) + 11))
-        messages = await self.reader.get_messages(self.entity, ids=ids)
+        messages = await self.reader.get_messages(self.entity, ids=list(album_context_ids(post)))
         same = [m for m in messages if m is not None and getattr(m, "grouped_id", None) == post.group_id]
         return group_messages(same)[0] if same else post
 
@@ -91,9 +94,19 @@ class Service:
         recent = await self.reader.get_messages(self.entity, limit=self.settings.edit_scan_limit)
         combined = {m.id: m for m in recent if m.id > floor and m.id <= cursor}
         combined.update({m.id: m for m in new})
+        posts = group_messages(combined.values())
+        albums = [post for post in posts if post.group_id is not None]
+        missing_ids = {i for post in albums for i in album_context_ids(post) if i not in combined}
         async with self.lock:
-            for post in group_messages(combined.values()):
-                post = await self.complete_album(post)
+            if missing_ids:
+                # Batch overlapping windows instead of repeating requests for
+                # every album in the history and edit pages.
+                group_ids = {post.group_id for post in albums}
+                nearby = await self.reader.get_messages(self.entity, ids=sorted(missing_ids))
+                combined.update((m.id, m) for m in nearby
+                                if m is not None and getattr(m, "grouped_id", None) in group_ids)
+                posts = group_messages(combined.values())
+            for post in posts:
                 await self.pipeline.evaluate(post)
             if new:
                 self.store.set_meta(self.cursor_key, str(max(m.id for m in new)))

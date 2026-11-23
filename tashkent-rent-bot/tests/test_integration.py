@@ -208,6 +208,24 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.message_ids, [1, 2])
         self.assertEqual(result.text, TEXT)
 
+    async def test_poll_fetches_missing_parts_of_multiple_albums_together(self):
+        self.service.settings = replace(self.settings, edit_scan_limit=2)
+        self.store.set_meta(self.service.cursor_key, "50")
+        self.reader.messages = {m.id: m for m in (
+            message(50, TEXT, 88), message(51, "", 88),
+            message(60, TEXT, 99), message(61, "", 99),
+        )}
+        with patch.object(self.reader, "get_messages", wraps=self.reader.get_messages) as get_messages:
+            with patch.object(self.service.pipeline, "evaluate", new_callable=AsyncMock) as evaluate:
+                await self.service.poll_once()
+        album_calls = [c.kwargs["ids"] for c in get_messages.await_args_list if "ids" in c.kwargs]
+        self.assertEqual(len(album_calls), 1)
+        self.assertIn(50, album_calls[0])
+        self.assertNotIn(60, album_calls[0])
+        posts = [c.args[0] for c in evaluate.await_args_list]
+        self.assertEqual([(p.message_ids, p.text) for p in posts], [([50, 51], TEXT), ([60, 61], TEXT)])
+        self.assertEqual(self.store.get_meta(self.service.cursor_key), "61")
+
     async def test_other_people_and_groups_cannot_control_bot(self):
         for chat, sender, kind in [(999, 999, "private"), (123, 999, "private"), (123, 123, "group")]:
             await handle_update({"message": {"chat": {"id": chat, "type": kind},
