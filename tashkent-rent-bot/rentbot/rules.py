@@ -77,8 +77,6 @@ def classify(listing: Listing, today: date) -> Decision:
     else:
         unknowns.append("Дата сдачи дома: возраст не подтверждён")
 
-    if len(deviations) > 1:
-        reasons.append("Больше одного отклонения от строгих критериев")
     if len(unknowns) > 2:
         reasons.append("Неизвестны более двух критериев")
     if unknowns and deviations:

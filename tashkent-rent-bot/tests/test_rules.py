@@ -34,8 +34,12 @@ class RulesTests(unittest.TestCase):
             with self.subTest(data=data):
                 self.assertEqual(classify(suitable(**data), TODAY).tier, "quiet")
 
-    def test_two_deviations_rejected(self):
-        self.assertEqual(classify(suitable(price_usd=800, walking_minutes=25), TODAY).tier, "reject")
+    def test_both_deviations_within_quiet_limits(self):
+        result = classify(suitable(price_usd=800, walking_minutes=25), TODAY)
+        self.assertEqual(result.tier, "quiet")
+        self.assertEqual(len(result.deviations), 2)
+        self.assertEqual(classify(suitable(price_usd=800.01, walking_minutes=25), TODAY).tier, "reject")
+        self.assertEqual(classify(suitable(price_usd=800, walking_minutes=25.001), TODAY).tier, "reject")
 
     def test_previous_occupancy_does_not_affect_delivery(self):
         for occupancy in (False, True, None):
