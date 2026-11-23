@@ -1,0 +1,36 @@
+[Unit]
+Description=Tashkent apartment Telegram watcher
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=rentbot
+Group=rentbot
+WorkingDirectory=/opt/tashkent-rent-bot
+EnvironmentFile=/etc/tashkent-rent-bot/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/env DATA_DIR=/var/lib/tashkent-rent-bot LOCATIONS_FILE=/var/lib/tashkent-rent-bot/locations.json /opt/tashkent-rent-bot/.venv/bin/python -m rentbot run
+Restart=always
+RestartSec=10
+TimeoutStopSec=45
+StateDirectory=tashkent-rent-bot
+StateDirectoryMode=0700
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tashkent-rent-bot
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/tashkent-rent-bot
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

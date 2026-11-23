@@ -24,6 +24,9 @@ data/
 *.db
 *.db-*
 *.log
+private-state*.tar.gz
+*.pem
+*.key
 locations.json
 locations.*.json
 !locations.example.json
