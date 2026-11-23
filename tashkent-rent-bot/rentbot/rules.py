@@ -8,9 +8,15 @@ from datetime import date
 
 from .models import Decision, Listing
 
+MAX_BUILDING_AGE_YEARS = 5
+LOUD_MAX_PRICE_USD = 750
+QUIET_MAX_PRICE_USD = 800
+LOUD_MAX_WALK_MINUTES = 20
+QUIET_MAX_WALK_MINUTES = 25
 
-def _three_years_before(today: date) -> date:
-    year = today.year - 3
+
+def _building_age_cutoff(today: date) -> date:
+    year = today.year - MAX_BUILDING_AGE_YEARS
     return date(year, today.month, min(today.day, calendar.monthrange(year, today.month)[1]))
 
 
@@ -47,15 +53,17 @@ def classify(listing: Listing, today: date) -> Decision:
             deviations.append(label)
 
     numeric(listing.area_m2, "Площадь, м²", hard_min=40)
-    numeric(listing.price_usd, "Аренда, $/месяц", strict_max=800, relaxed_max=850)
-    numeric(listing.walking_minutes, "Пешком до офиса, минут", strict_max=20, relaxed_max=25)
+    numeric(listing.price_usd, "Аренда, $/месяц",
+            strict_max=LOUD_MAX_PRICE_USD, relaxed_max=QUIET_MAX_PRICE_USD)
+    numeric(listing.walking_minutes, "Пешком до офиса, минут",
+            strict_max=LOUD_MAX_WALK_MINUTES, relaxed_max=QUIET_MAX_WALK_MINUTES)
 
-    cutoff = _three_years_before(today)
+    cutoff = _building_age_cutoff(today)
     if listing.is_new_building is False:
         reasons.append("Дом не соответствует требованию сданной новостройки")
     elif listing.commissioned_on is not None:
         if not cutoff <= listing.commissioned_on <= today:
-            reasons.append("Дом старше трёх лет или ещё не сдан")
+            reasons.append(f"Дом старше {MAX_BUILDING_AGE_YEARS} лет или ещё не сдан")
         if listing.commissioned_year is not None and listing.commissioned_year != listing.commissioned_on.year:
             reasons.append("Противоречивые дата и год сдачи дома")
     elif listing.commissioned_year is not None:
@@ -63,16 +71,11 @@ def classify(listing: Listing, today: date) -> Decision:
         if year < 1 or year > today.year:
             reasons.append("Некорректный или будущий год сдачи дома")
         elif date(year, 12, 31) < cutoff:
-            reasons.append("Дом старше трёх лет")
+            reasons.append(f"Дом старше {MAX_BUILDING_AGE_YEARS} лет")
         elif date(year, 1, 1) < cutoff:
             unknowns.append("Точная дата сдачи дома: пограничный год")
     else:
         unknowns.append("Дата сдачи дома: возраст не подтверждён")
-
-    if listing.previously_occupied is None:
-        unknowns.append("Прежнее проживание")
-    elif listing.previously_occupied:
-        deviations.append("В квартире ранее жили")
 
     if len(deviations) > 1:
         reasons.append("Больше одного отклонения от строгих критериев")

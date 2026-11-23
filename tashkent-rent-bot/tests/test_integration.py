@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 from rentbot.config import Settings
 from rentbot.http import APIError
+from rentbot.models import Decision
 from rentbot.pipeline import Pipeline, SourcePost, group_messages
 from rentbot.service import Service, single_instance
 from rentbot.storage import Store
@@ -17,7 +18,7 @@ from rentbot.telegram import BotAPI, handle_update
 
 NOW = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)  # 17:00 Tashkent
 TEXT = ("Сдаётся квартира на длительный срок. Новостройка. Дом сдан 2025-04-01. "
-        "2 комнаты, 45 м². Цена 780 USD в месяц. Никто не жил.")
+        "2 комнаты, 45 м². Цена 750 USD в месяц. Никто не жил.")
 
 
 class Clock(datetime):
@@ -65,7 +66,7 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
         self.store.close()
 
     async def test_quiet_to_loud_replaces_queue_and_repost_is_suppressed(self):
-        first = SourcePost([1], TEXT.replace("780", "850"))
+        first = SourcePost([1], TEXT.replace("750", "800"))
         quiet = await self.pipeline.evaluate(first, NOW)
         self.assertEqual(quiet["tier"], "quiet")
         loud = await self.pipeline.evaluate(SourcePost([1], TEXT), NOW)
@@ -162,7 +163,7 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_price_change_rechecked_before_send(self):
         item = await self.queued()
-        self.reader.messages[1].message = TEXT.replace("780", "900")
+        self.reader.messages[1].message = TEXT.replace("750", "900")
         await self.service.deliver_one(item)
         self.bot.message.assert_not_awaited()
         self.assertEqual(self.store.counts()["pending"], 0)
@@ -175,13 +176,34 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.counts()["pending"], 1)
 
     async def test_overdue_quiet_waits_until_today_cutoff_after_downtime(self):
-        item = await self.queued(TEXT.replace("780", "850"))
+        item = await self.queued(TEXT.replace("750", "800"))
         morning = NOW.replace(hour=4)
         with patch("rentbot.service.quiet_due", return_value=NOW + timedelta(hours=1)):
             await self.service.deliver_one(item)
         self.bot.message.assert_not_awaited()
         self.assertEqual(self.store.due(NOW), [])
         self.assertEqual(self.store.counts()["pending"], 1)
+
+    async def test_pending_loud_under_previous_limit_waits_quietly_for_cutoff(self):
+        morning = NOW.replace(hour=4)
+        cutoff = NOW.replace(hour=11, minute=50)
+        text = TEXT.replace("750", "775")
+        self.reader.messages[1].message = text
+        with patch.object(Clock, "now", return_value=morning):
+            with patch("rentbot.pipeline.classify", return_value=Decision(tier="loud")):
+                await self.service.pipeline.evaluate(SourcePost([1], text), morning)
+            previous, = self.store.due(morning)
+            await self.service.deliver_one(previous)
+
+        self.bot.message.assert_not_awaited()
+        self.assertEqual(self.store.due(cutoff - timedelta(seconds=1)), [])
+        current, = self.store.due(cutoff)
+        self.assertEqual(current["key"], previous["key"])
+        self.assertEqual(current["tier"], "quiet")
+        with patch.object(Clock, "now", return_value=cutoff):
+            await self.service.deliver_one(current)
+        self.bot.message.assert_awaited_once()
+        self.assertTrue(self.bot.message.call_args.kwargs["silent"])
 
     async def test_first_start_does_not_backfill(self):
         await self.service.initialize()

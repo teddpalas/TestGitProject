@@ -1,6 +1,13 @@
 """Bot API delivery. The reader account never sends messages on your behalf."""
 
 from .http import APIError, post_json
+from .rules import (
+    LOUD_MAX_PRICE_USD,
+    LOUD_MAX_WALK_MINUTES,
+    MAX_BUILDING_AGE_YEARS,
+    QUIET_MAX_PRICE_USD,
+    QUIET_MAX_WALK_MINUTES,
+)
 
 
 BUTTON_COMMANDS = {
@@ -53,9 +60,9 @@ class BotAPI:
 
 RULES_TEXT = (
     "Ищу долгосрочную аренду целой квартиры.\n"
-    "Дом сдан не более 3 лет назад, от 2 комнат, от 40 м² — обязательно.\n"
-    "Сразу со звуком: до $800, пешком до офиса ≤20 минут, никто не жил.\n"
-    "Тихо: максимум одно отклонение — до $850 ИЛИ до 25 минут ИЛИ уже жили.\n"
+    f"Дом сдан не более {MAX_BUILDING_AGE_YEARS} лет назад, от 2 комнат, от 40 м² — обязательно.\n"
+    f"Сразу со звуком: до ${LOUD_MAX_PRICE_USD}, пешком до офиса ≤{LOUD_MAX_WALK_MINUTES} минут.\n"
+    f"Тихо: максимум одно отклонение — до ${QUIET_MAX_PRICE_USD} ИЛИ до {QUIET_MAX_WALK_MINUTES} минут.\n"
     "Также тихо: 1–2 неизвестных параметра, если остальные строго подходят.\n"
     "Пн–Пт до 16:50: тихие объявления накапливаются к 16:50; после — сразу.\n"
     "Сб–Вс: тихие сразу. Часовой пояс — Ташкент.\n"
